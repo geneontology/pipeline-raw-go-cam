@@ -213,7 +213,7 @@ pipeline {
 		    sh './build-cli.sh'
 		    // Attempt to rsync produced into bin/.
 		    withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
-			sh 'rsync -avz -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY" minerva-cli/bin/minerva-cli.* skyhook@$SKYHOOK_MACHINE/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/bin/'
+			sh 'rsync -avz -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY" minerva-cli/bin/minerva-cli.* skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/bin/'
 		    }
 		}
 	    }
