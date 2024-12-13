@@ -213,7 +213,7 @@ pipeline {
 		    sh './build-cli.sh'
 		    // Attempt to rsync produced into bin/.
 		    withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
-			sh 'rsync -avz -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY" minerva-cli/bin/minerva-cli.* skyhook@$SKYHOOK_MACHINE/home/skyhook/pipeline-raw-go-cam/bin/'
+			sh 'rsync -avz -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY" minerva-cli/bin/minerva-cli.* skyhook@$SKYHOOK_MACHINE/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/bin/'
 		    }
 		}
 	    }
@@ -240,7 +240,7 @@ pipeline {
 			// available in bin/ (and lib/).
 			sh 'mkdir -p bin/'
 			withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
-			    sh 'rsync -avz -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY" skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/bin/* ./bin/'
+			    sh 'rsync -avz -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY" skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/bin/* ./bin/'
 			}
 			sh 'chmod +x bin/*'
 
@@ -256,7 +256,7 @@ pipeline {
 			// Compress and out.
 			//sh 'tar --use-compress-program=pigz -cvf noctua-models-json.tgz -C jsonout .'
 			withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
-			    sh 'scp -r -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY jsonout skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/products/json/'
+			    sh 'scp -r -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY jsonout skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/products/json/'
 			}
 		    }
 		}
@@ -271,7 +271,7 @@ pipeline {
 		    echo "There has been a successful run of the ${env.BRANCH_NAME} pipeline."
 		    emailext to: "${TARGET_SUCCESS_EMAILS}",
 			subject: "GO Pipeline success for ${env.BRANCH_NAME}",
-			body: "There has been successful run of the ${env.BRANCH_NAME} pipeline. Please see: https://build.geneontology.io/job/pipeline-from-goa/job/${env.BRANCH_NAME}"
+			body: "There has been successful run of the ${env.BRANCH_NAME} pipeline. Please see: https://build.geneontology.io/job/pipeline-pipeline-raw-go-cam/job/${env.BRANCH_NAME}"
 		}
 	    }
 	}
@@ -280,14 +280,14 @@ pipeline {
 	    echo "There has been a change in the ${env.BRANCH_NAME} pipeline."
 	    emailext to: "${TARGET_ADMIN_EMAILS}",
 		subject: "GO Pipeline change for ${env.BRANCH_NAME}",
-		body: "There has been a pipeline status change in ${env.BRANCH_NAME}. Please see: https://build.geneontology.io/job/geneontology/job/pipeline-from-goa/job/${env.BRANCH_NAME}"
+		body: "There has been a pipeline status change in ${env.BRANCH_NAME}. Please see: https://build.geneontology.io/job/geneontology/job/pipeline-raw-go-cam/job/${env.BRANCH_NAME}"
 	}
 	// Let's let our internal people know if things go badly.
 	failure {
 	    echo "There has been a failure in the ${env.BRANCH_NAME} pipeline."
 	    emailext to: "${TARGET_ADMIN_EMAILS}",
 		subject: "GO Pipeline FAIL for ${env.BRANCH_NAME}",
-		body: "There has been a pipeline failure in ${env.BRANCH_NAME}. Please see: https://build.geneontology.io/job/pipeline-from-goa/job/${env.BRANCH_NAME}"
+		body: "There has been a pipeline failure in ${env.BRANCH_NAME}. Please see: https://build.geneontology.io/job/pipeline-raw-go-cam/job/${env.BRANCH_NAME}"
 	}
     }
 }
