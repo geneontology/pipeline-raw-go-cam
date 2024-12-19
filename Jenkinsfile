@@ -229,12 +229,11 @@ pipeline {
 		    // data environment.
 		    dir('./json-noctua-models') {
 
-			// Attempt to trim/prune/speed up
-			// noctua-models as we do for
-			// go-ontology for
-			// https://github.com/geneontology/pipeline/issues/278
-			// .
-			checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: TARGET_NOCTUA_MODELS_BRANCH]], extensions: [[$class: 'CloneOption', depth: 1, noTags: true, reference: '', shallow: true, timeout: 120]], userRemoteConfigs: [[url: 'https://github.com/geneontology/noctua-models.git', refspec: "+refs/heads/${env.TARGET_NOCTUA_MODELS_BRANCH}:refs/remotes/origin/${env.TARGET_NOCTUA_MODELS_BRANCH}"]]]
+			// Pull saved models into our environment from
+			// S3, rather than GH.
+			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+			    sh 'aws s3 cp s3://go-data-product-live-go-cam/ttl ./models/ --recursive --exclude "*" --include "*.ttl"'
+			}
 
 			// Make all software products
 			// available in bin/ (and lib/).
@@ -253,10 +252,25 @@ pipeline {
 			    sh './bin/minerva-cli.sh --dump-owl-json --journal blazegraph.jnl --ontojournal blazegraph-go-lego-reacto-neo.jnl --folder jsonout'
 			}
 
-			// Compress and out.
-			//sh 'tar --use-compress-program=pigz -cvf noctua-models-json.tgz -C jsonout .'
-			withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
-			    sh 'scp -r -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY jsonout skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/products/json/'
+			// Get into S3, cohabitating safely with TTL.
+			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+			    sh 'aws s3 cp ./jsonout/ s3://go-data-product-live-go-cam/product/json/low-level/ --recursive --exclude "*" --include "*.json"'
+			}
+
+			// // Compress and out.
+			// //sh 'tar --use-compress-program=pigz -cvf noctua-models-json.tgz -C jsonout .'
+			// withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
+			//     sh 'scp -r -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY jsonout skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/products/json/'
+			// }
+
+			// Product the metadata.
+			dir('./jsonout') {
+			    sh 'wget -N https://raw.githubusercontent.com/geneontology/go-site/$TARGET_GO_SITE_BRANCH/scripts/gen-model-meta.py'
+			    sh 'python3 gen-model-meta.py > ../metadata.json'
+			}
+			// Get into S3, cohabitating safely with TTL.
+			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+			    sh 'aws s3 cp ./metadata.json s3://go-data-product-live-go-cam/product/json/provider-to-model.json'
 			}
 		    }
 		}
