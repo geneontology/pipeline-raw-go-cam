@@ -10,7 +10,7 @@ pipeline {
 	// First of the month @12am, for "release" (also "current").
 	//cron('0 0 1 * *')
 	// MWF @9pm (crontab on prod should have run at 8pm, in about 10m)
-	cron(0 21 * * 1,3,5)
+	cron('0 21 * * 1,3,5')
     }
     environment {
 
