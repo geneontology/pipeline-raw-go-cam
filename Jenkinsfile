@@ -248,12 +248,19 @@ pipeline {
 			// Compile models.
 			sh 'mkdir -p jsonout'
 			withEnv(['MINERVA_CLI_MEMORY=128G']){
+
+			    // Cleaning.
+			    sh 'rm -r -f blazegraph.jnl || true'
+			    sh 'rm -r -f blazegraph-go-lego-reacto-neo.jnl || true'
+
 			    // "Import" models.
 			    sh './bin/minerva-cli.sh --import-owl-models -f models -j blazegraph.jnl'
 			    // Get reacto.
-			    sh 'wget -O go-lego-reacto.owl http://skyhook.berkeleybop.org/go-lego-reacto.owl'
+			    sh 'wget -O blazegraph-go-lego-reacto-neo.jnl.gz http://skyhook.berkeleybop.org/blazegraph-go-lego-reacto-neo.jnl.gz'
+			    sh 'gunzip blazegraph-go-lego-reacto-neo.jnl.gz'
+
 			    // JSON out to directory.
-			    sh './bin/minerva-cli.sh -g file:go-lego-reacto.owl --dump-owl-json --journal blazegraph.jnl --ontojournal blazegraph-go-lego-reacto-neo.jnl --folder jsonout'
+			    sh './bin/minerva-cli.sh --dump-owl-json --journal blazegraph.jnl --ontojournal blazegraph-go-lego-reacto-neo.jnl --folder jsonout'
 			}
 
 			// Get into S3, cohabitating safely with TTL.
