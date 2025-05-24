@@ -255,6 +255,17 @@ pipeline {
 
 			    // "Import" models.
 			    sh './bin/minerva-cli.sh --import-owl-models -f models -j blazegraph.jnl'
+
+			    // Get a unified GPAD.
+			    sh 'mkdir -p legacy/gpad'
+			    // Convert GO-CAM to GPAD.
+			    sh './bin/minerva-cli.sh --lego-to-gpad-sparql --ontology $MINERVA_INPUT_ONTOLOGIES --ontojournal ontojournal.jnl -i blazegraph.jnl --gpad-output legacy/gpad'
+			    sh 'cat legacy/gpad/*.gpad > legacy/gpad/unified.gpad'
+			    // Get into S3, cohabitating safely with TTL.
+			    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+				sh 'aws s3 cp ./legacy/gpad/unified.gpad s3://go-data-product-live-go-cam/product/gpad/unified.gpad'
+			    }
+
 			    // Get reacto.
 			    sh 'wget -O blazegraph-go-lego-reacto-neo.jnl.gz http://skyhook.berkeleybop.org/blazegraph-go-lego-reacto-neo.jnl.gz'
 			    sh 'gunzip blazegraph-go-lego-reacto-neo.jnl.gz'
@@ -356,6 +367,7 @@ void initialize() {
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/ttl || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/json || true'
+	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/gpad || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/blazegraph || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/upstream_and_raw_data || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/pages || true'
