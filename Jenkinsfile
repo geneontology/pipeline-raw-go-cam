@@ -261,11 +261,11 @@ pipeline {
 			    // Convert GO-CAM to GPAD.
 			    sh './bin/minerva-cli.sh --lego-to-gpad-sparql --ontology $MINERVA_INPUT_ONTOLOGIES --ontojournal ontojournal.jnl -i blazegraph.jnl --gpad-output legacy/gpad'
 			    sh 'wget -N https://raw.githubusercontent.com/geneontology/go-site/$TARGET_GO_SITE_BRANCH/scripts/unify-gpads.pl'
-			    sh 'perl ./unify-gpads.pl legacy/gpad > legacy/gpad/unified.gpad'
+			    sh 'perl ./unify-gpads.pl legacy/gpad > ./unified.gpad'
 
 			    // Get into S3, cohabitating safely with TTL.
 			    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-				sh 'aws s3 cp ./legacy/gpad/unified.gpad s3://go-data-product-live-go-cam/product/gpad/unified.gpad'
+				sh 'aws s3 cp ./unified.gpad s3://go-data-product-live-go-cam/product/gpad/unified.gpad'
 			    }
 
 			    // Get reacto.
