@@ -220,6 +220,43 @@ pipeline {
 		}
 	    }
 	}
+	stage('Test gocam-py environment') {
+	    agent {
+		docker {
+		    image 'geneontology/dev-base:ea32b54c822f7a3d9bf20c78208aca452af7ee80_2023-08-28T125255'
+		    args "-u root:root --tmpfs /opt:exec -w /opt"
+		}
+	    }
+	    steps {
+
+		// May be parallelized in the future, but may need to
+		// serve as input into into mega step.
+		script {
+
+		    // Get code.
+		    sh "mkdir -p /opt/go-site"
+		    sh "cd /opt/ && git clone -b $TARGET_GO_SITE_BRANCH https://github.com/geneontology/go-site.git"
+
+		    // Make location for file ops.
+		    sh "mkdir -p /opt/models"
+
+		    // Pull saved models into our environment from
+		    // S3, rather than GH.
+		    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+			sh 'aws s3 cp s3://go-data-product-live-go-cam/product/json/low-level /opt/models/ --recursive --exclude "*" --include "*.json"'
+		    }
+
+		    sh "cd /opt/go-site/scripts && pip install -r requirements.txt"
+
+		    sh "python3 /opt/go-site/scripts/minerva_to_gocam_yaml_converter.py --verbose /opt/models/"
+		    sh "ls -AlF /opt/models"
+
+		    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+			sh 'aws s3 cp /opt/models s3://go-data-product-live-go-cam/product/yaml/go-cam --recursive --exclude "*" --include "*.yaml"'
+		    }
+		}
+	    }
+	}
 	stage('Minerva generations') {
 	    steps {
 
@@ -262,10 +299,11 @@ pipeline {
 			    sh './bin/minerva-cli.sh --lego-to-gpad-sparql --ontology $MINERVA_INPUT_ONTOLOGIES --ontojournal ontojournal.jnl -i blazegraph.jnl --gpad-output legacy/gpad'
 			    sh 'wget -N https://raw.githubusercontent.com/geneontology/go-site/$TARGET_GO_SITE_BRANCH/scripts/unify-gpads.pl'
 			    sh 'perl ./unify-gpads.pl legacy/gpad > ./unified.gpad'
+			    sh 'gzip ./unified.gpad'
 
 			    // Get into S3, cohabitating safely with TTL.
 			    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-				sh 'aws s3 cp ./unified.gpad s3://go-data-product-live-go-cam/product/gpad/unified.gpad'
+				sh 'aws s3 cp ./unified.gpad.gz s3://go-data-product-live-go-cam/product/gpad/unified.gpad.gz'
 			    }
 
 			    // Get reacto.
