@@ -233,6 +233,10 @@ pipeline {
 		// serve as input into into mega step.
 		script {
 
+		    // WARNING: MEGAHACK
+		    sh 'echo \'nameserver 8.8.8.8\' > /etc/resolv.conf'
+		    sh 'echo \'search lbl.gov\' >> /etc/resolv.conf'
+
 		    // Get code.
 		    sh "mkdir -p /opt/go-site"
 		    sh "cd /opt/ && git clone -b $TARGET_GO_SITE_BRANCH https://github.com/geneontology/go-site.git"
