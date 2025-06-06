@@ -244,16 +244,17 @@ pipeline {
 		    // Make location for file ops.
 		    sh "mkdir -p /opt/models"
 
+		    // Setup necessary libs and code.
+		    sh "cd /opt/go-site/scripts && pip install -r requirements.txt"
+		    sh "pip install awscli"
+
 		    // Pull saved models into our environment from
 		    // S3, rather than GH.
 		    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
 			sh 'aws s3 cp s3://go-data-product-live-go-cam/product/json/low-level /opt/models/ --recursive --exclude "*" --include "*.json"'
 		    }
 
-		    // Setup necessary libs and code.
-		    sh "cd /opt/go-site/scripts && pip install -r requirements.txt"
-		    sh "pip install awscli"
-
+		    // Run converter.
 		    sh "python3 /opt/go-site/scripts/minerva_to_gocam_yaml_converter.py --verbose /opt/models/"
 		    sh "ls -AlF /opt/models"
 
