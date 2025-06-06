@@ -250,7 +250,9 @@ pipeline {
 			sh 'aws s3 cp s3://go-data-product-live-go-cam/product/json/low-level /opt/models/ --recursive --exclude "*" --include "*.json"'
 		    }
 
+		    // Setup necessary libs and code.
 		    sh "cd /opt/go-site/scripts && pip install -r requirements.txt"
+		    sh "pip install awscli"
 
 		    sh "python3 /opt/go-site/scripts/minerva_to_gocam_yaml_converter.py --verbose /opt/models/"
 		    sh "ls -AlF /opt/models"
