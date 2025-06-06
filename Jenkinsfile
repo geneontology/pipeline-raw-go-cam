@@ -220,50 +220,6 @@ pipeline {
 		}
 	    }
 	}
-	stage('Test gocam-py environment') {
-	    agent {
-		docker {
-		    image 'geneontology/dev-base:ea32b54c822f7a3d9bf20c78208aca452af7ee80_2023-08-28T125255'
-		    args "-u root:root --tmpfs /opt:exec -w /opt"
-		}
-	    }
-	    steps {
-
-		// May be parallelized in the future, but may need to
-		// serve as input into into mega step.
-		script {
-
-		    // WARNING: MEGAHACK
-		    sh 'echo \'nameserver 8.8.8.8\' > /etc/resolv.conf'
-		    sh 'echo \'search lbl.gov\' >> /etc/resolv.conf'
-
-		    // Get code.
-		    sh "mkdir -p /opt/go-site"
-		    sh "cd /opt/ && git clone -b $TARGET_GO_SITE_BRANCH https://github.com/geneontology/go-site.git"
-
-		    // Make location for file ops.
-		    sh "mkdir -p /opt/models"
-
-		    // Setup necessary libs and code.
-		    sh "cd /opt/go-site/scripts && pip install -r requirements.txt"
-		    sh "pip install awscli"
-
-		    // Pull saved models into our environment from
-		    // S3, rather than GH.
-		    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-			sh 'aws s3 cp s3://go-data-product-live-go-cam/product/json/low-level /opt/models/ --recursive --exclude "*" --include "*.json"'
-		    }
-
-		    // Run converter.
-		    sh "python3 /opt/go-site/scripts/minerva_to_gocam_yaml_converter.py --verbose /opt/models/"
-		    sh "ls -AlF /opt/models"
-
-		    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-			sh 'aws s3 cp /opt/models s3://go-data-product-live-go-cam/product/yaml/go-cam --recursive --exclude "*" --include "*.yaml"'
-		    }
-		}
-	    }
-	}
 	stage('Minerva generations') {
 	    steps {
 
@@ -341,6 +297,50 @@ pipeline {
 			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
 			    sh 'aws s3 cp ./metadata.json s3://go-data-product-live-go-cam/product/json/provider-to-model.json'
 			}
+		    }
+		}
+	    }
+	}
+	stage('Produce gocam-py YAML') {
+	    agent {
+		docker {
+		    image 'geneontology/dev-base:ea32b54c822f7a3d9bf20c78208aca452af7ee80_2023-08-28T125255'
+		    args "-u root:root --tmpfs /opt:exec -w /opt"
+		}
+	    }
+	    steps {
+
+		// May be parallelized in the future, but may need to
+		// serve as input into into mega step.
+		script {
+
+		    // WARNING: MEGAHACK
+		    sh 'echo \'nameserver 8.8.8.8\' > /etc/resolv.conf'
+		    sh 'echo \'search lbl.gov\' >> /etc/resolv.conf'
+
+		    // Get code.
+		    sh "mkdir -p /opt/go-site"
+		    sh "cd /opt/ && git clone -b $TARGET_GO_SITE_BRANCH https://github.com/geneontology/go-site.git"
+
+		    // Make location for file ops.
+		    sh "mkdir -p /opt/models"
+
+		    // Setup necessary libs and code.
+		    sh "cd /opt/go-site/scripts && pip install -r requirements.txt"
+		    sh "pip install awscli"
+
+		    // Pull saved models into our environment from
+		    // S3, rather than GH.
+		    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+			sh 'aws s3 cp s3://go-data-product-live-go-cam/product/json/low-level /opt/models/ --recursive --exclude "*" --include "*.json"'
+		    }
+
+		    // Run converter.
+		    sh "python3 /opt/go-site/scripts/minerva_to_gocam_yaml_converter.py --verbose /opt/models/"
+		    sh "ls -AlF /opt/models"
+
+		    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+			sh 'aws s3 cp /opt/models s3://go-data-product-live-go-cam/product/yaml/go-cam --recursive --exclude "*" --include "*.yaml"'
 		    }
 		}
 	    }
