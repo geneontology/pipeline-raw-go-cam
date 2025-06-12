@@ -269,6 +269,10 @@ pipeline {
 				sh 'aws s3 cp ./unified.gpad.gz s3://go-data-product-live-go-cam/product/gpad/unified.gpad.gz'
 			    }
 
+			    // Proceed with moving all individual
+			    // gpads (by model name) into S3.
+			    sh 'aws s3 cp ./legacy/gpad/ s3://go-data-product-live-go-cam/product/gpad/model/ --recursive --exclude "*" --include "*.gpad"'
+
 			    // Get reacto.
 			    sh 'wget -O blazegraph-go-lego-reacto-neo.jnl.gz http://skyhook.berkeleybop.org/blazegraph-go-lego-reacto-neo.jnl.gz'
 			    sh 'gunzip blazegraph-go-lego-reacto-neo.jnl.gz'
