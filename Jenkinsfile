@@ -301,7 +301,7 @@ pipeline {
 			// Get into S3, cohabitating safely with TTL.
 			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
 			    sh 'aws s3 cp ./metadata.json s3://go-data-product-live-go-cam/product/json/provider-to-model.json'
-			    sh 'aws s3 cp ../ s3://go-data-product-live-go-cam/product/json/ --recursive --exclude "*" --include "index-*.json"'
+			    sh 'aws s3 cp ../ s3://go-data-product-live-go-cam/product/json/ --recursive --exclude "*" --include "*_index.json"'
 			}
 		    }
 		}
