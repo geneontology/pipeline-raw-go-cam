@@ -296,10 +296,12 @@ pipeline {
 			dir('./jsonout') {
 			    sh 'wget -N https://raw.githubusercontent.com/geneontology/go-site/$TARGET_GO_SITE_BRANCH/scripts/gen-model-meta.py'
 			    sh 'python3 gen-model-meta.py > ../metadata.json'
+			    sh 'python3 gen-model-meta.py --keys-to-index taxon --keys-to-index contributor --keys-to-index providedBy --keys-to-index source --keys-to-index evidence --keys-to-index entity --output-dir ../'
 			}
 			// Get into S3, cohabitating safely with TTL.
 			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
 			    sh 'aws s3 cp ./metadata.json s3://go-data-product-live-go-cam/product/json/provider-to-model.json'
+			    sh 'aws s3 cp ../ s3://go-data-product-live-go-cam/product/json/ --recursive --exclude "*" --include "*_index.json"'
 			}
 		    }
 		}
