@@ -227,81 +227,89 @@ pipeline {
 		// serve as input into into mega step.
 		script {
 
-		    // Create a relative working directory and setup our
-		    // data environment.
-		    dir('./json-noctua-models') {
+		    sh 'pwd'
+		    sh 'env'
+		    sh 'python3 -m venv mypyenv'
+		    withEnv(["PATH+EXTRA=${WORKSPACE}/bin:${WORKSPACE}/mypyenv/bin", 'PYTHONHOME=', "VIRTUAL_ENV=${WORKSPACE}/mypyenv", 'PY_ENV=mypyenv', 'PY_BIN=mypyenv/bin']){
+			// Extra package for the indexer.
+			sh 'python3 ./mypyenv/bin/pip3 install --force-reinstall oaklib'
 
-			// Pull saved models into our environment from
-			// S3, rather than GH.
-			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-			    sh 'aws s3 cp s3://go-data-product-live-go-cam/ttl ./models/ --recursive --exclude "*" --include "*.ttl"'
-			}
+			// Create a relative working directory and setup our
+			// data environment.
+			dir('./json-noctua-models') {
 
-			// Make all software products
-			// available in bin/ (and lib/).
-			sh 'mkdir -p bin/'
-			withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
-			    sh 'rsync -avz -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY" skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/bin/* ./bin/'
-			}
-			sh 'chmod +x bin/*'
+			    // Pull saved models into our environment from
+			    // S3, rather than GH.
+			    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+				sh 'aws s3 cp s3://go-data-product-live-go-cam/ttl ./models/ --recursive --exclude "*" --include "*.ttl"'
+			    }
 
-			// Compile models.
-			sh 'mkdir -p jsonout'
-			withEnv(['MINERVA_CLI_MEMORY=128G']){
+			    // Make all software products
+			    // available in bin/ (and lib/).
+			    sh 'mkdir -p bin/'
+			    withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
+				sh 'rsync -avz -e "ssh -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY" skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/bin/* ./bin/'
+			    }
+			    sh 'chmod +x bin/*'
 
-			    // Cleaning.
-			    sh 'rm -r -f blazegraph.jnl || true'
-			    sh 'rm -r -f blazegraph-go-lego-reacto-neo.jnl || true'
+			    // Compile models.
+			    sh 'mkdir -p jsonout'
+			    withEnv(['MINERVA_CLI_MEMORY=128G']){
 
-			    // "Import" models.
-			    sh './bin/minerva-cli.sh --import-owl-models -f models -j blazegraph.jnl'
+				// Cleaning.
+				sh 'rm -r -f blazegraph.jnl || true'
+				sh 'rm -r -f blazegraph-go-lego-reacto-neo.jnl || true'
 
-			    // Get a unified GPAD.
-			    sh 'mkdir -p legacy/gpad'
-			    // Convert GO-CAM to GPAD.
-			    sh './bin/minerva-cli.sh --lego-to-gpad-sparql --ontology $MINERVA_INPUT_ONTOLOGIES --ontojournal ontojournal.jnl -i blazegraph.jnl --gpad-output legacy/gpad'
-			    sh 'wget -N https://raw.githubusercontent.com/geneontology/go-site/$TARGET_GO_SITE_BRANCH/scripts/unify-gpads.pl'
-			    sh 'perl ./unify-gpads.pl legacy/gpad > ./unified.gpad'
-			    sh 'gzip ./unified.gpad'
+				// "Import" models.
+				sh './bin/minerva-cli.sh --import-owl-models -f models -j blazegraph.jnl'
+
+				// Get a unified GPAD.
+				sh 'mkdir -p legacy/gpad'
+				// Convert GO-CAM to GPAD.
+				sh './bin/minerva-cli.sh --lego-to-gpad-sparql --ontology $MINERVA_INPUT_ONTOLOGIES --ontojournal ontojournal.jnl -i blazegraph.jnl --gpad-output legacy/gpad'
+				sh 'wget -N https://raw.githubusercontent.com/geneontology/go-site/$TARGET_GO_SITE_BRANCH/scripts/unify-gpads.pl'
+				sh 'perl ./unify-gpads.pl legacy/gpad > ./unified.gpad'
+				sh 'gzip ./unified.gpad'
+
+				// Get into S3, cohabitating safely with TTL.
+				withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+				    sh 'aws s3 cp ./unified.gpad.gz s3://go-data-product-live-go-cam/product/gpad/unified.gpad.gz'
+				}
+
+				// Proceed with moving all individual
+				// gpads (by model name) into S3.
+				sh 'aws s3 cp ./legacy/gpad/ s3://go-data-product-live-go-cam/product/gpad/model/ --recursive --exclude "*" --include "*.gpad"'
+
+				// Get reacto.
+				sh 'wget -O blazegraph-go-lego-reacto-neo.jnl.gz http://skyhook.berkeleybop.org/blazegraph-go-lego-reacto-neo.jnl.gz'
+				sh 'gunzip blazegraph-go-lego-reacto-neo.jnl.gz'
+
+				// JSON out to directory.
+				sh './bin/minerva-cli.sh --dump-owl-json --journal blazegraph.jnl --ontojournal blazegraph-go-lego-reacto-neo.jnl --folder jsonout'
+			    }
 
 			    // Get into S3, cohabitating safely with TTL.
 			    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-				sh 'aws s3 cp ./unified.gpad.gz s3://go-data-product-live-go-cam/product/gpad/unified.gpad.gz'
+				sh 'aws s3 cp ./jsonout/ s3://go-data-product-live-go-cam/product/json/low-level/ --recursive --exclude "*" --include "*.json"'
 			    }
 
-			    // Proceed with moving all individual
-			    // gpads (by model name) into S3.
-			    sh 'aws s3 cp ./legacy/gpad/ s3://go-data-product-live-go-cam/product/gpad/model/ --recursive --exclude "*" --include "*.gpad"'
+			    // // Compress and out.
+			    // //sh 'tar --use-compress-program=pigz -cvf noctua-models-json.tgz -C jsonout .'
+			    // withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
+			    //     sh 'scp -r -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY jsonout skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/products/json/'
+			    // }
 
-			    // Get reacto.
-			    sh 'wget -O blazegraph-go-lego-reacto-neo.jnl.gz http://skyhook.berkeleybop.org/blazegraph-go-lego-reacto-neo.jnl.gz'
-			    sh 'gunzip blazegraph-go-lego-reacto-neo.jnl.gz'
-
-			    // JSON out to directory.
-			    sh './bin/minerva-cli.sh --dump-owl-json --journal blazegraph.jnl --ontojournal blazegraph-go-lego-reacto-neo.jnl --folder jsonout'
-			}
-
-			// Get into S3, cohabitating safely with TTL.
-			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-			    sh 'aws s3 cp ./jsonout/ s3://go-data-product-live-go-cam/product/json/low-level/ --recursive --exclude "*" --include "*.json"'
-			}
-
-			// // Compress and out.
-			// //sh 'tar --use-compress-program=pigz -cvf noctua-models-json.tgz -C jsonout .'
-			// withCredentials([file(credentialsId: 'skyhook-private-key', variable: 'SKYHOOK_IDENTITY'), string(credentialsId: 'skyhook-machine-private', variable: 'SKYHOOK_MACHINE')]) {
-			//     sh 'scp -r -o StrictHostKeyChecking=no -o IdentitiesOnly=true -o IdentityFile=$SKYHOOK_IDENTITY jsonout skyhook@$SKYHOOK_MACHINE:/home/skyhook/pipeline-raw-go-cam/$BRANCH_NAME/products/json/'
-			// }
-
-			// Product the metadata.
-			dir('./jsonout') {
-			    sh 'wget -N https://raw.githubusercontent.com/geneontology/go-site/$TARGET_GO_SITE_BRANCH/scripts/gen-model-meta.py'
-			    sh 'python3 gen-model-meta.py > ../metadata.json'
-			    sh 'python3 gen-model-meta.py --keys-to-index taxon --keys-to-index contributor --keys-to-index providedBy --keys-to-index source --keys-to-index evidence --keys-to-index entity --output-dir ../'
-			}
-			// Get into S3, cohabitating safely with TTL.
-			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
-			    sh 'aws s3 cp ./metadata.json s3://go-data-product-live-go-cam/product/json/provider-to-model.json'
-			    sh 'aws s3 cp ../ s3://go-data-product-live-go-cam/product/json/ --recursive --exclude "*" --include "*_index.json"'
+			    // Product the metadata.
+			    dir('./jsonout') {
+				sh 'wget -N https://raw.githubusercontent.com/geneontology/go-site/$TARGET_GO_SITE_BRANCH/scripts/gen-model-meta.py'
+				sh 'python3 gen-model-meta.py > ../metadata.json'
+				sh 'python3 gen-model-meta.py --keys-to-index taxon --keys-to-index contributor --keys-to-index providedBy --keys-to-index source --keys-to-index evidence --keys-to-index entity --output-dir ../'
+			    }
+			    // Get into S3, cohabitating safely with TTL.
+			    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+				sh 'aws s3 cp ./metadata.json s3://go-data-product-live-go-cam/product/json/provider-to-model.json'
+				sh 'aws s3 cp ../ s3://go-data-product-live-go-cam/product/json/ --recursive --exclude "*" --include "*_index.json"'
+			    }
 			}
 		    }
 		}
