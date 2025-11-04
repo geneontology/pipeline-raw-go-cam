@@ -308,7 +308,12 @@ pipeline {
 			    // Get into S3, cohabitating safely with TTL.
 			    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
 				sh 'aws s3 cp ./metadata.json s3://go-data-product-live-go-cam/product/json/provider-to-model.json'
-				sh 'aws s3 cp ../ s3://go-data-product-live-go-cam/product/json/ --recursive --exclude "*" --include "*_index.json"'
+				sh 'pwd'
+				sh 'ls'
+				sh 'env'
+				sh 'ls ../'
+				sh 'aws s3 cp ./metadata.json s3://go-data-product-live-go-cam/product/json/api-index/provider-to-model.json'
+				sh 'aws s3 cp "../*_index.json" s3://go-data-product-live-go-cam/product/json/api-index'
 			    }
 			}
 		    }
@@ -428,6 +433,8 @@ void initialize() {
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/ttl || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/json || true'
+	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/json/api-index || true'
+	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/json/low-level || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/gpad || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/blazegraph || true'
 	sh 'mkdir -p $WORKSPACE/mnt/$JOB_NAME/products/upstream_and_raw_data || true'
