@@ -313,7 +313,7 @@ pipeline {
 				sh 'env'
 				sh 'ls ../'
 				sh 'aws s3 cp ./metadata.json s3://go-data-product-live-go-cam/product/json/api-index/provider-to-model.json'
-				sh 'aws s3 cp "../*_index.json" s3://go-data-product-live-go-cam/product/json/api-index'
+				sh 'aws s3 cp "./*_index.json" s3://go-data-product-live-go-cam/product/json/api-index'
 			    }
 			}
 		    }
