@@ -101,8 +101,11 @@ pipeline {
 
 	// Minerva operating profile.
 	// WARNING: This will need to be changed.
+	// MINERVA_INPUT_ONTOLOGIES = [
+	//     "http://snapshot.geneontology.org/ontology/extensions/go-lego.owl"
+	// ].join(" ")
 	MINERVA_INPUT_ONTOLOGIES = [
-	    "http://snapshot.geneontology.org/ontology/extensions/go-lego.owl"
+	    "https://ontology-build.geneontology.org/extensions/go-lego.owl"
 	].join(" ")
 
 	///
