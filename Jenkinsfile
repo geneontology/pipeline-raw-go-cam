@@ -353,7 +353,11 @@ pipeline {
 		    sh "mkdir -p /opt/models"
 
 		    // Setup necessary libs and code.
-		    sh "cd /opt/go-site/scripts && pip install -r requirements.txt"
+		    // Cap oaklib below 0.7: 0.7 added `llm` as a core dep,
+		    // which cascades a resolver backtrack into an ancient
+		    // fastobo sdist that no longer builds (setuptools-rust
+		    // API removed). See geneontology/pipeline-raw-go-cam#12.
+		    sh "cd /opt/go-site/scripts && pip install 'oaklib<0.7' -r requirements.txt"
 		    sh "pip install awscli"
 
 		    // Pull saved models into our environment from
