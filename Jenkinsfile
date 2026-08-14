@@ -90,12 +90,6 @@ pipeline {
 	AWS_CLOUDFRONT_RELEASE_DISTRIBUTION_ID = 'null'
 
 	///
-	/// Ontobio Validation
-	///
-	// WARNING: This will need to be changed.
-	VALIDATION_ONTOLOGY_URL="http://snapshot.geneontology.org/ontology/go.json"
-
-	///
 	/// Minerva input.
 	///
 
@@ -108,23 +102,10 @@ pipeline {
 	    "https://ontology-build.geneontology.org/extensions/go-lego.owl"
 	].join(" ")
 
-	///
-	/// GOlr/AmiGO input.
-	///
-
-	// GOlr load profile.
-	GOLR_SOLR_MEMORY = "256G"
-	GOLR_LOADER_MEMORY = "256G"
-	GOLR_INPUT_ONTOLOGIES = [
-	    "http://snapshot.geneontology.org/ontology/extensions/go-amigo.owl"
-	].join(" ")
-	// WARNING: hard-coded for the moment.
-	GOLR_INPUT_GAFS = [
-	    "http://skyhook.berkeleybop.org/confinement-for-pipeline-388/union.gaf.gz"
-	].join(" ")
-	GOLR_INPUT_PANTHER_TREES = [
-	    "http://snapshot.geneontology.org/products/panther/arbre.tgz"
-	].join(" ")
+	// (The GOlr/AmiGO input block and VALIDATION_ONTOLOGY_URL were inert
+	// big-pipeline template residue -- this pipeline has no GOlr or
+	// validation stage; nothing consumed them. Removed 2026-08-14,
+	// operations#99.)
 
 	///
 	/// Groups to run and tests to avoid running during the current
@@ -284,7 +265,7 @@ pipeline {
 				sh 'aws s3 cp ./legacy/gpad/ s3://go-data-product-live-go-cam/product/gpad/model/ --recursive --exclude "*" --include "*.gpad"'
 
 				// Get reacto.
-				sh 'wget -O blazegraph-go-lego-reacto-neo.jnl.gz http://skyhook.berkeleybop.org/blazegraph-go-lego-reacto-neo.jnl.gz'
+				sh 'wget -O blazegraph-go-lego-reacto-neo.jnl.gz https://skyhook.berkeleybop.org/blazegraph-go-lego-reacto-neo.jnl.gz'
 				sh 'gunzip blazegraph-go-lego-reacto-neo.jnl.gz'
 
 				// JSON out to directory.
