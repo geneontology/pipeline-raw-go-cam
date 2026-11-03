@@ -4,8 +4,8 @@ The Jenkins pipeline that produces a **"live" view of GO-CAM data
 products** — a rolling snapshot of production Noctua curation, republished
 as GPAD / low-level JSON / API indexes / gocam-py YAML for internal and
 downstream use. Marked `[EXPERIMENTAL]` in the README by origin, but it now
-has **real downstream consumers** (the GOEx load, go-fastapi, the GO-CAM
-Browser), so treat breakage as production-impacting.
+has a **real downstream consumer** (the GOEx load reads the unified GPAD),
+so treat breakage as production-impacting.
 
 This is a **sibling of `pipeline-from-goa`** and shares its Jenkins/skyhook/S3
 world, but it is a different animal: a *rolling live product*, not a
@@ -14,14 +14,16 @@ see "How this differs from pipeline-from-goa" below.
 
 ## What it does (data flow)
 
-One Jenkins job, one branch (`main`), the whole thing **inline in the
-`Jenkinsfile`** (no `scripts/`, no `justfile`, no `docs/`). Two build
-halves:
+One Jenkins job, one branch (`main`), almost all of it **inline in the
+`Jenkinsfile`** (two scripts under `scripts/`, both fetched from this
+branch at run time; no `justfile`, no `docs/`). Three build parts:
 
 1. **Minerva generations** (runs on the Jenkins agent in a Python venv;
    `minerva-cli` staged onto skyhook and rsync'd back):
    - Pull GO-CAM TTL from `s3://go-data-product-live-go-cam/ttl` into
-     `models/`.
+     `models/`, then `scripts/select-latest-ttl-export.py` drops every TTL
+     not written by the latest export (see Data provenance) and fails the
+     run if that export looks partial (under 90% of `ttl/`).
    - `minerva-cli --import-owl-models` → `blazegraph.jnl`.
    - `--lego-to-gpad-sparql` → per-model GPAD (`legacy/gpad/*.gpad`), then
      `unify-gpads.pl` (fetched from go-site) → `unified.gpad.gz`.
@@ -34,6 +36,16 @@ halves:
    `geneontology/dev-base:ea32b54c…_2023-08-28…`):
    - Pull low-level JSON back down, run go-site's
      `minerva_to_gocam_yaml_converter.py` → gocam-py YAML.
+3. **GO-CAM reports** (`scripts/gocam-reports.sh` in `ubuntu:noble`,
+   fetched from this branch at run time so Restart From Stage picks up
+   script fixes; gocam-py from `TARGET_GOCAM_PY_BRANCH`):
+   - gocam-py pipeline steps 1–5 on this run's `jsonout/`, then
+     `generate_log_summary.py` → `summary-html/` + `summary.xlsx`, the same
+     reports `pipeline-from-goa` publishes per release.
+   - Wrapped in `catchError(buildResult: 'UNSTABLE')`: the live products
+     are already uploaded, so a report failure does not fail the build.
+   - Refuses to install a gocam-py `uv.lock` that pins any file uploaded
+     in the last 7 days.
 
 **Everything is written back into `s3://go-data-product-live-go-cam/`**,
 fronted by CloudFront `E2291OLR508FRR` at `live-go-cam.geneontology.io`.
@@ -44,14 +56,33 @@ Product layout under that bucket:
 - `product/json/low-level/*.json`
 - `product/json/provider-to-model.json` and `product/json/api-index/*.json`
 - `product/yaml/go-cam/*.yaml`
+- `product/reports/go-cam/summary-html/` (entry
+  `go-cam_pipeline_report.html`; no directory index on this CDN) and
+  `product/reports/go-cam/summary.xlsx` — written with `aws s3 sync
+  --delete` confined to that prefix, `Cache-Control: max-age=3600`
 
 Known downstream consumers (search before renaming any of the above):
 
 - **GOEx load** reads `product/gpad/unified.gpad.gz` (issue #11 — a bad
   `assigned_by` there blocked the GOEx load, i.e. this is load-bearing).
-- **go-fastapi** reads the `product/json/api-index/*.json` files
-  (the recent index work was for `geneontology/go-fastapi#137`).
-- **GO-CAM Browser** consumes these products.
+- Not consumers any more (checked 2026-11-02): go-fastapi (v0.5.0 reads
+  `current.geneontology.org/go-cams/index-json/`) and the GO-CAM Browser
+  (reads `release.geneontology.org/<date>/products/go-cam-search/`). No
+  other org repo reads the bucket, and neither the bucket nor CloudFront
+  logs requests, so runtime readers outside the org are unknown.
+
+### Bucket lifecycle (since 2026-11-02)
+
+Versioning is on. Current objects expire **30 days after their last
+write**; replaced or expired versions are kept **90 days**. This removes
+stale files only because **every run, and every export, rewrites every
+current object** (`aws s3 cp --recursive`). Never switch either writer to
+a copy that skips unchanged files (`aws s3 sync` of files that are not
+regenerated each run) — unchanged current files would then expire. The
+reports stage's `sync` is safe: every file it uploads is regenerated. Recovery of anything removed
+or overwritten in the last 90 days: `aws s3api list-object-versions` plus a
+copy of the prior version. Record: `geneontology/operations`
+`events/live-go-cam-lifecycle-2026-11-02.md`.
 
 ### Schedule (and the upstream it depends on)
 
@@ -81,6 +112,14 @@ reason the "live" product reflects current production Noctua state. If the
 live products look stale or wrong at the source, suspect that cron / the
 `toaster` checkout first, before this pipeline.
 
+That `cp` never deletes, so `ttl/` also holds models since removed from
+`noctua-models` until the 30-day expiry above (702 Reactome models retired
+on 2026-07-02 sat there for four months and were republished every run).
+`select-latest-ttl-export.py` therefore imports only the objects written
+within 3 hours of the newest one. On 2026-11-02 the latest export was
+byte-identical (S3 ETag vs git blob MD5) to `noctua-models` master at
+export time.
+
 Because this is a *live view of production Noctua*, this pipeline
 **intentionally reads from a serving bucket** (`live-go-cam`) — the strict
 "never read pipeline inputs from a serving endpoint" reproducibility rule
@@ -97,13 +136,14 @@ NEO isn't produced in-pipeline yet — flagged, on the roadmap, not a blocker.
 `pipeline-from-goa`'s `CLAUDE.md` has a lot of hard-won process. Most of it
 does **not** transfer, because this repo is structured differently:
 
-- **Everything is inline in the `Jenkinsfile`.** There is **no
-  `scripts/*.sh`**, so the whole "externalized scripts + Restart-from-Stage
-  fast path", the `su jenkins -c` in-container pattern, and the
-  `shellcheck scripts/*.sh` rule **do not apply here**. If you fix a bug,
-  you are almost always editing the `Jenkinsfile` (slow path — see CI
-  below). Consider externalizing scripts later if iteration cost hurts, but
-  that's a project, not an assumption.
+- **Almost everything is inline in the `Jenkinsfile`.** The exceptions
+  are `scripts/gocam-reports.sh` (the GO-CAM reports stage), which follows
+  `pipeline-from-goa`'s pattern: fetched at run time, `su jenkins -c`
+  inside the container, `shellcheck` before pushing, and fixable through
+  Restart From Stage; and `scripts/select-latest-ttl-export.py`
+  (stdlib only), also fetched at run time. For every other stage a bug fix means editing the
+  `Jenkinsfile` (slow path — see CI below). Externalizing the rest is a
+  project, not an assumption.
 - **No release / "bless" / Zenodo / snapshot→release lifecycle.** This
   publishes a single rolling live product. The env block in the
   `Jenkinsfile` inherits a large amount of **vestigial** configuration from
@@ -209,8 +249,8 @@ Before renaming anything under
 
     gh search code 'PATH org:geneontology' --limit 100
 
-The GPAD, `api-index/*.json`, and gocam YAML paths are consumed by the GOEx
-load, go-fastapi, and the GO-CAM Browser (above). If any repo hardcodes the
+The unified GPAD path is consumed by the GOEx load (above); other readers
+may exist outside the org, unlogged. If any repo hardcodes the
 URL, the rename needs cross-repo coordination (open + assign an issue, pin
 behind a cutover), not a unilateral change. If the audit is clean, land it.
 

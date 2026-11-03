@@ -32,6 +32,8 @@ pipeline {
 	TARGET_ROBOT_BRANCH = 'master'
 	// The branch of noctua-models to use.
 	TARGET_NOCTUA_MODELS_BRANCH = 'master'
+	// The branch of gocam-py to use.
+	TARGET_GOCAM_PY_BRANCH = 'main'
 	// The people to call when things go bad. It is a comma-space
 	// "separated" string.
 	// TARGET_ADMIN_EMAILS = 'sjcarbon@lbl.gov,debert@usc.edu,smoxon@lbl.gov'
@@ -226,7 +228,15 @@ pipeline {
 			    // S3, rather than GH.
 			    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
 				sh 'aws s3 cp s3://go-data-product-live-go-cam/ttl ./models/ --recursive --exclude "*" --include "*.ttl"'
+				sh 'aws s3api list-objects-v2 --bucket go-data-product-live-go-cam --prefix ttl/ --query "Contents[].[Key,LastModified]" --output text > ttl-objects.tsv'
 			    }
+
+			    // ttl/ is written by a non-deleting copy, so it also
+			    // holds models since removed from noctua-models; keep
+			    // only the latest export's files. Fails the run on a
+			    // partial export.
+			    sh "curl -fsSL https://raw.githubusercontent.com/geneontology/pipeline-raw-go-cam/${env.BRANCH_NAME}/scripts/select-latest-ttl-export.py -o ./select-latest-ttl-export.py"
+			    sh 'python3 ./select-latest-ttl-export.py ttl-objects.tsv ./models'
 
 			    // Make all software products
 			    // available in bin/ (and lib/).
@@ -349,6 +359,60 @@ pipeline {
 
 		    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
 			sh 'aws s3 cp /opt/models s3://go-data-product-live-go-cam/product/yaml/go-cam --recursive --exclude "*" --include "*.yaml"'
+		    }
+		}
+	    }
+	}
+	stage('GO-CAM reports') {
+	    steps {
+		// The live products are already in S3 by now; a report
+		// failure marks the build UNSTABLE rather than failing it.
+		catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+		    script {
+
+			// Capture host jenkins UID/GID for Docker
+			// privilege drop.
+			env.JENKINS_UID = sh(
+			    script: 'id -u',
+			    returnStdout: true
+			).trim()
+			env.JENKINS_GID = sh(
+			    script: 'id -g',
+			    returnStdout: true
+			).trim()
+
+			// The gocam-py pipeline scripts are not in its
+			// package; run them from a clone.
+			dir('./gocam-py') {
+			    git branch: TARGET_GOCAM_PY_BRANCH, url: 'https://github.com/geneontology/gocam-py.git'
+			}
+
+			// Fetched fresh from this branch so that Restart
+			// From Stage picks up script fixes.
+			sh "mkdir -p ./scripts && curl -fsSL https://raw.githubusercontent.com/geneontology/pipeline-raw-go-cam/${env.BRANCH_NAME}/scripts/gocam-reports.sh -o ./scripts/gocam-reports.sh"
+
+			// Reads ./json-noctua-models/jsonout from the
+			// Minerva generations stage; writes ./gocam-reports.
+			sh """
+			    docker run --rm \\
+			      --init \\
+			      --mount type=tmpfs,destination=/tmp \\
+			      -u root:root \\
+			      -v "\$WORKSPACE":/workspace \\
+			      -e JENKINS_UID \\
+			      -e JENKINS_GID \\
+			      -e TARGET_GO_SITE_BRANCH \\
+			      -e START_DATE \\
+			      -e BRANCH_NAME \\
+			      ubuntu:noble \\
+			      bash /workspace/scripts/gocam-reports.sh
+			"""
+
+			// --delete is confined to the reports prefix,
+			// which only this stage writes.
+			withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
+			    sh 'aws s3 sync --delete --cache-control max-age=3600 ./gocam-reports/ s3://go-data-product-live-go-cam/product/reports/go-cam/'
+			}
 		    }
 		}
 	    }
