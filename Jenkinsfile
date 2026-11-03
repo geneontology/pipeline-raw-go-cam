@@ -1,5 +1,11 @@
 pipeline {
     agent any
+    options {
+	// Every run writes the same S3 paths and minerva-cli takes 128G;
+	// a repository scan that finds a new commit starts a build at once.
+	// Takes effect from the first build that runs with this line.
+	disableConcurrentBuilds()
+    }
     // In additional to manual runs, trigger somewhere at midnight to
     // give us the max time in a day to get things right.
     triggers {
