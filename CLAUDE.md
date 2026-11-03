@@ -14,9 +14,9 @@ see "How this differs from pipeline-from-goa" below.
 
 ## What it does (data flow)
 
-One Jenkins job, one branch (`main`), the whole thing **inline in the
-`Jenkinsfile`** (no `scripts/`, no `justfile`, no `docs/`). Two build
-halves:
+One Jenkins job, one branch (`main`), almost all of it **inline in the
+`Jenkinsfile`** (one script, `scripts/gocam-reports.sh`; no `justfile`, no
+`docs/`). Three build parts:
 
 1. **Minerva generations** (runs on the Jenkins agent in a Python venv;
    `minerva-cli` staged onto skyhook and rsync'd back):
@@ -34,6 +34,16 @@ halves:
    `geneontology/dev-base:ea32b54c…_2023-08-28…`):
    - Pull low-level JSON back down, run go-site's
      `minerva_to_gocam_yaml_converter.py` → gocam-py YAML.
+3. **GO-CAM reports** (`scripts/gocam-reports.sh` in `ubuntu:noble`,
+   fetched from this branch at run time so Restart From Stage picks up
+   script fixes; gocam-py from `TARGET_GOCAM_PY_BRANCH`):
+   - gocam-py pipeline steps 1–5 on this run's `jsonout/`, then
+     `generate_log_summary.py` → `summary-html/` + `summary.xlsx`, the same
+     reports `pipeline-from-goa` publishes per release.
+   - Wrapped in `catchError(buildResult: 'UNSTABLE')`: the live products
+     are already uploaded, so a report failure does not fail the build.
+   - Refuses to install a gocam-py `uv.lock` that pins any file uploaded
+     in the last 7 days.
 
 **Everything is written back into `s3://go-data-product-live-go-cam/`**,
 fronted by CloudFront `E2291OLR508FRR` at `live-go-cam.geneontology.io`.
@@ -44,6 +54,10 @@ Product layout under that bucket:
 - `product/json/low-level/*.json`
 - `product/json/provider-to-model.json` and `product/json/api-index/*.json`
 - `product/yaml/go-cam/*.yaml`
+- `product/reports/go-cam/summary-html/` (entry
+  `go-cam_pipeline_report.html`; no directory index on this CDN) and
+  `product/reports/go-cam/summary.xlsx` — written with `aws s3 sync
+  --delete` confined to that prefix, `Cache-Control: max-age=3600`
 
 Known downstream consumers (search before renaming any of the above):
 
@@ -97,13 +111,13 @@ NEO isn't produced in-pipeline yet — flagged, on the roadmap, not a blocker.
 `pipeline-from-goa`'s `CLAUDE.md` has a lot of hard-won process. Most of it
 does **not** transfer, because this repo is structured differently:
 
-- **Everything is inline in the `Jenkinsfile`.** There is **no
-  `scripts/*.sh`**, so the whole "externalized scripts + Restart-from-Stage
-  fast path", the `su jenkins -c` in-container pattern, and the
-  `shellcheck scripts/*.sh` rule **do not apply here**. If you fix a bug,
-  you are almost always editing the `Jenkinsfile` (slow path — see CI
-  below). Consider externalizing scripts later if iteration cost hurts, but
-  that's a project, not an assumption.
+- **Almost everything is inline in the `Jenkinsfile`.** The one exception
+  is `scripts/gocam-reports.sh` (the GO-CAM reports stage), which follows
+  `pipeline-from-goa`'s pattern: fetched at run time, `su jenkins -c`
+  inside the container, `shellcheck` before pushing, and fixable through
+  Restart From Stage. For every other stage a bug fix means editing the
+  `Jenkinsfile` (slow path — see CI below). Externalizing the rest is a
+  project, not an assumption.
 - **No release / "bless" / Zenodo / snapshot→release lifecycle.** This
   publishes a single rolling live product. The env block in the
   `Jenkinsfile` inherits a large amount of **vestigial** configuration from
