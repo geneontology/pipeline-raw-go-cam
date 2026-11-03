@@ -84,6 +84,9 @@ EOF
 su jenkins -c 'git config --global --add safe.directory /workspace/gocam-py'
 su jenkins -c 'cd /workspace/gocam-py && uv sync --frozen --all-extras'
 
+# The gocam-py steps add to their output directories rather than replace
+# them; start empty even when /tmp is not a fresh tmpfs.
+rm -rf "$WORK"
 su jenkins -c "
     mkdir -p \
         $WORK/01-gocam-models \

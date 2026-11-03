@@ -228,7 +228,15 @@ pipeline {
 			    // S3, rather than GH.
 			    withCredentials([string(credentialsId: 'aws_go_access_key', variable: 'AWS_ACCESS_KEY_ID'), string(credentialsId: 'aws_go_secret_key', variable: 'AWS_SECRET_ACCESS_KEY')]) {
 				sh 'aws s3 cp s3://go-data-product-live-go-cam/ttl ./models/ --recursive --exclude "*" --include "*.ttl"'
+				sh 'aws s3api list-objects-v2 --bucket go-data-product-live-go-cam --prefix ttl/ --query "Contents[].[Key,LastModified]" --output text > ttl-objects.tsv'
 			    }
+
+			    // ttl/ is written by a non-deleting copy, so it also
+			    // holds models since removed from noctua-models; keep
+			    // only the latest export's files. Fails the run on a
+			    // partial export.
+			    sh "curl -fsSL https://raw.githubusercontent.com/geneontology/pipeline-raw-go-cam/${env.BRANCH_NAME}/scripts/select-latest-ttl-export.py -o ./select-latest-ttl-export.py"
+			    sh 'python3 ./select-latest-ttl-export.py ttl-objects.tsv ./models'
 
 			    // Make all software products
 			    // available in bin/ (and lib/).
